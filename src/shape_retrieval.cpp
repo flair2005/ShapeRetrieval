@@ -1,11 +1,18 @@
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/core/core.hpp>
+#include <Eigen/Sparse>
 
+#include <fstream>
 #include <iostream>
+#include <cstdio>
+#include <boost/algorithm/string.hpp>
+#include <vector>
 
 using namespace cv;
 using namespace std;
+
+typedef Eigen::Triplet<double> T;
 
 Mat float2byte(const Mat& If)
 {
@@ -14,6 +21,64 @@ Mat float2byte(const Mat& If)
     Mat Ib;
     If.convertTo(Ib, CV_8U, 255.0/(maxVal - minVal),-minVal * 255.0/(maxVal - minVal));
     return Ib;
+}
+
+vector<vector<double> > load_centroids(string filename)
+{
+    vector<vector<double> > centroids;
+    string line;
+    ifstream file(filename.c_str());
+    if(file)
+    {
+        while(getline(file, line))
+        {
+            vector<string> s;
+            boost::split(s, line, boost::is_any_of(";"));
+            if(s[s.size()] == "")
+                s.pop_back();
+
+            vector<double> f;
+            for(int i=0; i<s.size(); i++)
+                f.push_back(atof(s[i].c_str()));
+            centroids.push_back(f);
+        }
+    }
+    else
+        cout << "ERREUR: Impossible d'ouvrir le fichier." << endl;
+
+    return centroids;
+}
+
+vector<Eigen::SparseMatrix<double> > load_histograms(string filename, vector<string> &objects)
+{
+    vector<Eigen::SparseMatrix<double> > histograms; // contains all the histograms of the training sketches
+    int nb_centroids = 2500;
+    string line;
+    ifstream file(filename.c_str());
+    if(file)
+    {
+        while(getline(file, line))
+        {
+            vector<string> s;
+            boost::split(s, line, boost::is_any_of(";"));
+            if(s[s.size()] == "")
+                s.pop_back();
+            objects.push_back(s.back());
+            s.pop_back();
+
+            Eigen::SparseMatrix<double> h(nb_centroids, 1);
+            vector<T> tripletList;
+            for(int i=0; i<s.size(); i++)
+                tripletList.push_back(T(i,0,atof(s[i].c_str())));
+            h.setFromTriplets(tripletList.begin(), tripletList.end());
+            histograms.push_back(h);
+        }
+    }
+    else
+        cout << "ERREUR: Impossible d'ouvrir le fichier." << endl;
+
+    return histograms;
+
 }
 
 Mat dft_inverse(Mat g)
@@ -189,8 +254,9 @@ int main()
     {
         mulSpectrums(R[i], dftI, R[i], 0);
         dft(R[i], R[i], DFT_INVERSE);
-        imshow("Display", float2byte(R[i]));
-        waitKey();
+        normalize(R[i], R[i], 0, 1, CV_MINMAX);
+        /*imshow("Display", float2byte(R[i]));
+        waitKey();*/
     }
 
     // Gabor par filter2D
@@ -223,18 +289,23 @@ int main()
     double feature_size = 0.2;
     int feature_dim = k*nb_tiles*nb_tiles; // dimension of one feature vector
     int local_patch_side = (int) floor(A.cols * sqrt(feature_size)); // =sqrt(area_image * feature_size)
-    int gap = (A.cols - local_patch_side) / 31; // gap between two key points on the image (we need to put 32 key points evenly
+    int gap = (int) floor((A.cols - local_patch_side) / 31); // gap between two key points on the image (we need to put 32 key points evenly
     // distributed on a row of length A.cols and with a margin of local_patch_side/2 on the link and right
     int semi_side = (int) floor(local_patch_side/2);
     int pixel_per_cell = (int) floor(local_patch_side / nb_tiles); // there are pixel_per_cell² pixels in one cell Cst
     double features[nb_features][feature_dim];
     for(int i=0; i<nb_features; i++)
     {
-        memset(features[i], 0, feature_dim);
+        for(int j=0; j<feature_dim; j++)
+        {
+            features[i][j] = 0;
+        }
     }
+    //printf("feature_dim=%d ; local_patch_side=%d ; gap=%d ; semi_side=%d ; pixel_per_cell=%d", feature_dim, local_patch_side, gap, semi_side, pixel_per_cell);
 
     int countFeature = 0;
     int countdim = 0;
+    double norm = 0; // norm of one feature, used to normalize each feature
     for(int i=0; i<32; i++)
     {
         for(int j=0; j<32; j++)
@@ -253,16 +324,36 @@ int main()
                             {
                                 features[countFeature][countdim] += R[th].at<float>(semi_side + i*gap + s*pixel_per_cell + x,
                                 semi_side + j*gap + t*pixel_per_cell + y);
+                                norm += features[countFeature][countdim] * features[countFeature][countdim];
                             }
                         }
                         countdim++;
                     }
                 }
             }
+            norm = sqrt(norm);
+            for(int c=0; c<feature_dim; c++)
+            {
+                features[countFeature][c] /= norm; // normalize the feature
+            }
+            norm = 0;
             countdim = 0;
             countFeature++;
         }
     }
+
+
+    /*
+    * Load the centroïds
+    */
+    vector<vector<double> > centroids = load_centroids("centroids.csv");
+
+
+    /*
+    * Load the histograms of the database sketches
+    */
+    vector<string> objects; // objects[i] is the name of the object represented on the sketch i
+    vector<Eigen::SparseMatrix<double> > histograms = load_histograms("histograms.csv", objects);
 
     return 0;
 }
