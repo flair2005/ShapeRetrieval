@@ -49,6 +49,116 @@ vector<vector<double> > load_centroids(string filename)
     return centroids;
 }
 
+void vocab (double*** (test_base) , int k){//TODO allow for more supple matrix sizes
+    int n_sketches = sizeof(test_base);
+    int reduced_fv_size = 10;
+    int fv_size = sizeof(test_base[0]);
+    int dim = sizeof(test_base[0][0]);
+    int attempts = 5;// attempts of k-means
+
+    Mat reduced(n_sketches*reduced_fv_size,dim,CV_32F);// reducing number of features of each sketch
+    for(int i = 0;i<n_sketches;i++){
+        for(int j = 0;j<reduced_fv_size;j++){
+            int next = rand()%fv_size;
+            for(int l = 0;l<dim;l++)
+                reduced.at<float>(i*reduced_fv_size+j,l)=test_base[i][next][l];
+        }
+    }
+    Mat labels;// performing k-means on all features to keep k centroids as the vocabulary
+    Mat centers;
+    kmeans(reduced, k, labels, TermCriteria(CV_TERMCRIT_ITER|CV_TERMCRIT_EPS, 10000, 0.0001), attempts, KMEANS_PP_CENTERS, centers );
+
+    // écrire centers dans fichier centroids.csv;
+    ofstream myStream("centroids.csv");
+    if(myStream){
+        for (int r = 0;r<centers.rows;r++){
+            for(int c = 0;c<centers.cols;c++){
+                myStream<<centers.at<float>(r,c)<<';';
+            }
+            myStream<<endl;
+        }
+    } else {
+    cout<<"fuck you all beatches !! (écriture dans fichier centroids impossible)";
+    }
+}
+
+double euclideanDistance(vector<double> u, vector<double> v){
+    int l = u.size();
+    int ll = v.size();
+    double dist = 0;
+    if (l==ll){
+        for(int i = 0;i<l;i++){
+            dist += (u[i]-v[i])*(u[i]-v[i]);
+        }
+    }
+    else{ cout<<"Could not measure distance between u and v :"<<endl<< "u :  ";
+        for(int i = 0;i<l;i++)
+            cout << u[i] << " ";
+        cout << endl << "v :  ";
+        for(int i = 0;i<ll;i++)
+            cout << v[i] << " ";
+        cout << endl;
+    }
+    return sqrt(dist);
+}
+
+
+vector<double> compute_hist (vector<vector<double> > centers, vector<vector<double> > test){
+    int nc = centers.size();
+    int nt = test.size();
+    int dim = centers[0].size();
+    vector<double> res;
+    for(int i = 0;i<dim;i++){
+        res.push_back(0.);
+    }
+    for(int i = 0;i<nt;i++){
+        int minIdx = 0;
+        double minDist = euclideanDistance(centers[0],test[i]);
+        for(int j = 1;j<nc;j++){
+            double newDist = euclideanDistance(centers[j],test[i]);
+            if (newDist < minDist){
+                minDist = newDist;
+                minIdx = j;
+            }
+        }
+        res[minIdx]+= 1.;
+    }
+    return res;
+}
+
+void frequency(Mat words, double*** test_base){
+    int n_sketches = sizeof(test_base);
+    int fv_size = sizeof(test_base[0]);
+    int dim = sizeof(test_base[0][0]);
+
+    vector<vector<double> > centers = load_centroids("centroids.csv");
+    vector<vector<double> > test;
+    for(int i = 0;i<n_sketches;i++)
+        for(int j = 0;j<fv_size;j++){
+            vector<double> feature;
+            for(int k = 0;k<dim;k++)
+                feature.push_back(test_base[i][j][k]);
+            test.push_back(feature);
+        }
+
+    vector<double> hist = compute_hist(centers,test);
+    double sum = 0.;
+    for(int i = 0;i<hist.size();i++){
+        sum+=hist[i];
+    }
+
+    ofstream myStream("frequencies.csv");
+    if(myStream){
+        for (int r = 0;r<hist.size();r++){
+
+            myStream<<hist[r]/sum << ';';
+        }
+    } else {
+    cout<<"fuck you all beatches !! (écriture dans fichier frequencies impossible)";
+    }
+
+}
+
 vector<Eigen::SparseMatrix<double> > load_histograms(string filename, vector<string> &objects)
 {
     vector<Eigen::SparseMatrix<double> > histograms; // contains all the histograms of the training sketches
