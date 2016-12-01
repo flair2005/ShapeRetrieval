@@ -331,17 +331,16 @@ void frequency(vector<vector<vector<double> > > test_base){
     int fv_size = test_base[0].size();
     int dim = test_base[0][0].size();
     vector<vector<double> > centers = load_centroids("centroids.csv");
-    vector<vector<double> > test;
-    for(int i = 0;i<n_sketches;i++){
-        for(int j = 0;j<fv_size;j++){
-            vector<double> feature;
-            for(int k = 0;k<dim;k++){
-                feature.push_back(test_base[i][j][k]);
-            }
-            test.push_back(feature);
+    vector<double> hist;
+    for(int i = 0;i<test_base.size();i++){
+        vector<double> temp = compute_hist(centers,test_base[i]);
+        for(int j = 0;j<temp.size();j++){
+            if(i==0)
+                hist.push_back(temp[j]);
+            else
+                hist[j]+=temp[j];
         }
     }
-    vector<double> hist = compute_hist(centers,test);
     double sum = 0.;
     for(int i = 0;i<hist.size();i++){
         sum+=hist[i];
@@ -358,7 +357,6 @@ void frequency(vector<vector<vector<double> > > test_base){
     }
 
 }
-
 vector<vector<double> > rmg(int M,int N){
     vector<vector<double> > res;
     //cout<<"generating random "<<M<<"x"<<N<<" matrix"<<endl;
