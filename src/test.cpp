@@ -25,8 +25,8 @@ const int nb_tiles = 4;
 const double feature_size = 0.2;
 const int feature_dim = k*nb_tiles*nb_tiles; // dimension of one feature vector
 
-const int nb_views_per_model = 100;
-const int nb_models = 1815;
+const int nb_views_per_model = 12; //100
+const int nb_models = 2; //1815
 const int N = nb_views_per_model * nb_models;
 
 typedef Eigen::Triplet<double> T;
@@ -43,13 +43,13 @@ Mat float2byte(const Mat& If)
 /*
 * Build an array of Mat, each containing a Gabor filter
 */
-Mat* build_gabor()
+vector<Mat> build_gabor()
 {
     double u,v;
-    Mat g[k];
+    vector<Mat> g;
     for(int i=0; i<k; i++)
     {
-        g[i] = Mat(kernel_size, kernel_size, CV_32F);
+        g.push_back(Mat(kernel_size, kernel_size, CV_32F));
     }
     for(int t=0; t<k; t++)
     {
@@ -87,17 +87,18 @@ Mat* build_gabor()
     return g;
 }
 
+
 /*
 * Apply the Gabor filter to the image A and return the k response images
 */
-Mat* apply_gabor(const Mat &A, const Mat g[])
+vector<Mat> apply_gabor(const Mat &A, const vector<Mat> &g)
 {
     Mat I;
     Mat dftI;
-    Mat R[k];
+    vector<Mat> R;
     for(int i=0; i<k; i++)
     {
-        R[i] = g[i].clone();
+        R.push_back(g[i].clone());
     }
     cvtColor(A,I,CV_BGR2GRAY);
     I.convertTo(I, CV_32F);
@@ -105,6 +106,8 @@ Mat* apply_gabor(const Mat &A, const Mat g[])
     dft(I, dftI);
     for(int i=0; i<k; i++)
     {
+        //cout << "types: " << dftI.type() << " ; " << g[i].type() << endl;
+        //cout << "sizes: " << dftI.size() << " ; " << g[i].size() << endl;
         mulSpectrums(R[i], dftI, R[i], 0);
         dft(R[i], R[i], DFT_INVERSE);
         normalize(R[i], R[i], 0, 1, CV_MINMAX);
@@ -115,10 +118,11 @@ Mat* apply_gabor(const Mat &A, const Mat g[])
     return R;
 }
 
+
 /*
 * Compute the Gabor features of one image
 */
-vector<vector<double> > compute_gabor_feature(const Mat R[])
+vector<vector<double> > compute_gabor_feature(const vector<Mat> &R)
 {
     int local_patch_side = (int) floor(R[0].cols * sqrt(feature_size)); // =sqrt(area_image * feature_size)
     int gap = (int) floor((R[0].cols - local_patch_side) / 31); // gap between two key points on the image (we need to put 32 key points evenly
@@ -319,7 +323,10 @@ Eigen::SparseMatrix<double> buil_hist(const vector<vector<double> > &centroids, 
     Eigen::SparseMatrix<double> hist(nearest_centroids.size(), 1);
     vector<T> tripletList;
     for(int i=0; i<nearest_centroids.size(); i++)
-        tripletList.push_back(T(i, 0, nearest_centroids[i] / (float) nb_features * log((float) N / frequencies[i])));
+    {
+        if(nearest_centroids[i] != 0)
+            tripletList.push_back(T(i, 0, nearest_centroids[i] / (float) nb_features * log((float) N / frequencies[i])));
+    }
     hist.setFromTriplets(tripletList.begin(), tripletList.end());
 
     return hist;
@@ -361,23 +368,30 @@ void compare_hist(const vector<Eigen::SparseMatrix<double> > &histograms, const 
 {
     vector<double> dist; // distances between hist and the histograms of the database
     Eigen::SparseMatrix<double> product;
+    //cout << hist << endl;
     for(int i=0; i<histograms.size(); i++)
     {
         product = hist * histograms[i].transpose();
+        cout << product << endl;
         dist.push_back(product.coeffRef(0,0) / (hist.norm() * histograms[i].norm()));
     }
-    vector<int> sorted_idx = min_indices(dist, 19);
+    vector<int> sorted_idx = min_indices(dist, 5);
 
     cout << "Best matches : ";
-    for(int i=0; i<19; i++)
-        cout << objects[sorted_idx[i]];
+    for(int i=0; i<5; i++)
+        cout << objects[sorted_idx[i]]<< " ; ";
     cout << endl;
+
+    /*for(int i=0; i<objects.size(); i++)
+    {
+        cout << dist[i] << endl;
+    }*/
 }
 
 
 int main()
 {
-    Mat A=imread("plane.png");
+    Mat A=imread("test_image.png");
 
     // Initialize the orientations theta
     for(int i=0; i<k; i++)
@@ -385,50 +399,33 @@ int main()
         theta[i] = CV_PI * i / k;
     }
 
-    /*
-    * Build an array of Mat, each containing a Gabor filter
-    */
-    Mat* g = build_gabor(); // array of size k
+    // Build an array of Mat, each containing a Gabor filter
+    vector<Mat> g = build_gabor(); // array of size k
 
-    /*
-    * Apply the Gabor filter to the image A and return the k response images
-    */
-    Mat* R = apply_gabor(A, g); // array of size k
+    // Apply the Gabor filter to the image A and return the k response images
+    vector<Mat> R = apply_gabor(A, g); // array of size k
+    cout << "Filtered image computed." << endl;
 
-    /*
-    * Compute each Gabor feature
-    */
+    // Compute each Gabor feature
     vector<vector<double> > features = compute_gabor_feature(R);
     cout << "Features of test image computed." << endl;
 
-    /*
-    * Load the centroïds
-    */
-    vector<vector<double> > centroids = load_centroids("centroids.csv");
+    // Load the centroïds
+    vector<vector<double> > centroids = load_centroids("storage/centroids.csv");
 
-
-    /*
-    * Load the histograms of the database sketches
-    */
+    // Load the histograms of the database sketches
     vector<string> objects; // objects[i] is the name of the object represented on the sketch i
-    vector<Eigen::SparseMatrix<double> > histograms = load_histograms("histograms.csv", objects);
+    vector<Eigen::SparseMatrix<double> > histograms = load_histograms("storage/histograms.csv", objects);
 
-
-    /*
-    * Load the frequencies of the centroids in the database
-    */
-    vector<double> frequencies = load_frequencies("frequencies.csv");
+    // Load the frequencies of the centroids in the database
+    vector<double> frequencies = load_frequencies("storage/frequencies.csv");
     cout << "All data loaded." << endl;
 
-    /*
-    * Constructs the histogram of the feature
-    */
+    // Constructs the histogram of the feature
     Eigen::SparseMatrix<double> hist = buil_hist(centroids, features, frequencies);
     cout << "Histogram of the test image computed." << endl;
 
-    /*
-    * Compare hist with the histograms of the database and print the best matches
-    */
+    // Compare hist with the histograms of the database and print the best matches
     compare_hist(histograms, hist, objects);
 
     return 0;
