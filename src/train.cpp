@@ -30,23 +30,23 @@ const int nb_tiles = 4;
 const double feature_size = 0.2;
 const int feature_dim = k*nb_tiles*nb_tiles; // dimension of one feature vector
 
-const int nb_views_per_model = 100;
-const int nb_models = 1815;
+const int nb_views_per_model = 12; //100
+const int nb_models = 2; //1815
 const int N = nb_views_per_model * nb_models;
 
-const int vocabulary_size = 2500; // number of centroids
+const int vocabulary_size = 100; // number of centroids: 2500
 
 
 /*
 * Build an array of Mat, each containing a Gabor filter
 */
-Mat* build_gabor()
+vector<Mat> build_gabor()
 {
     double u,v;
-    Mat g[k];
+    vector<Mat> g;
     for(int i=0; i<k; i++)
     {
-        g[i] = Mat(kernel_size, kernel_size, CV_32F);
+        g.push_back(Mat(kernel_size, kernel_size, CV_32F));
     }
     for(int t=0; t<k; t++)
     {
@@ -88,14 +88,14 @@ Mat* build_gabor()
 /*
 * Apply the Gabor filter to the image A and return the k response images
 */
-Mat* apply_gabor(const Mat &A, const Mat g[])
+vector<Mat> apply_gabor(const Mat &A, const vector<Mat> &g)
 {
     Mat I;
     Mat dftI;
-    Mat R[k];
+    vector<Mat> R;
     for(int i=0; i<k; i++)
     {
-        R[i] = g[i].clone();
+        R.push_back(g[i].clone());
     }
     cvtColor(A,I,CV_BGR2GRAY);
     I.convertTo(I, CV_32F);
@@ -103,6 +103,8 @@ Mat* apply_gabor(const Mat &A, const Mat g[])
     dft(I, dftI);
     for(int i=0; i<k; i++)
     {
+        //cout << "types: " << dftI.type() << " ; " << g[i].type() << endl;
+        //cout << "sizes: " << dftI.size() << " ; " << g[i].size() << endl;
         mulSpectrums(R[i], dftI, R[i], 0);
         dft(R[i], R[i], DFT_INVERSE);
         normalize(R[i], R[i], 0, 1, CV_MINMAX);
@@ -117,7 +119,7 @@ Mat* apply_gabor(const Mat &A, const Mat g[])
 /*
 * Compute the Gabor features of one image
 */
-vector<vector<double> > compute_gabor_feature(const Mat R[])
+vector<vector<double> > compute_gabor_feature(const vector<Mat> &R)
 {
     int local_patch_side = (int) floor(R[0].cols * sqrt(feature_size)); // =sqrt(area_image * feature_size)
     int gap = (int) floor((R[0].cols - local_patch_side) / 31); // gap between two key points on the image (we need to put 32 key points evenly
@@ -200,7 +202,7 @@ void vocab (vector<vector<vector<double> > > test_base){//TODO allow for more su
     kmeans(reduced, vocabulary_size, labels, TermCriteria(CV_TERMCRIT_ITER|CV_TERMCRIT_EPS, 10000, 0.0001), attempts, KMEANS_PP_CENTERS, centers);
 
     // écrire centers dans fichier centroids.csv;
-    ofstream myStream("centroids.csv");
+    ofstream myStream("storage/centroids.csv");
     if(myStream){
         for (int r = 0;r<centers.rows;r++){
             for(int c = 0;c<centers.cols;c++){
@@ -294,17 +296,78 @@ vector<double> compute_hist (vector<vector<double> > centers, vector<vector<doub
 
 
 /*
-* Build the files histograms.csv (containing the histograms of every sketch of the database) and frequencies.csv (containing
-* the frequency of each centroid among all features)
+* Build the file frequencies.csv (containing the frequency of each centroid among all features)
 */
-void build_hist_freq(vector<vector<vector<double> > > test_base){
+void build_freq(vector<vector<vector<double> > > test_base){
     int n_sketches = test_base.size();
     int fv_size = test_base[0].size();
     int dim = test_base[0][0].size();
     int m, view;
-    vector<vector<double> > centers = load_centroids("centroids.csv");
+    vector<vector<double> > centers = load_centroids("storage/centroids.csv");
     vector<double> hist;
-    ofstream streamHist("histograms.csv");
+    for(int i = 0;i<n_sketches;i++){
+            vector<double> temp = compute_hist(centers,test_base[i]);
+            for(int j = 0;j<temp.size();j++){
+                if(i==0)
+                    hist.push_back(temp[j]);
+                else
+                    hist[j]+=temp[j];
+            }
+        }
+
+    double sum = 0.;
+    for(int i = 0;i<hist.size();i++){
+        sum+=hist[i];
+    }
+
+    ofstream myStream("storage/frequencies.csv");
+    if(myStream){
+        for (int r = 0;r<hist.size();r++){
+
+            myStream<<hist[r]/sum << ';';
+        }
+    } else {
+    cout<<"Écriture dans le fichier frequencies.csv impossible";
+    }
+
+}
+
+
+vector<double> load_frequencies(string filename)
+{
+    vector<double> frequencies;
+    string line;
+    ifstream file(filename.c_str());
+    if(file)
+    {
+        getline(file, line);
+        vector<string> s;
+        boost::split(s, line, boost::is_any_of(";"));
+        if(s[s.size()-1] == "")
+            s.pop_back();
+
+        for(int i=0; i<s.size(); i++)
+            frequencies.push_back(atof(s[i].c_str()));
+    }
+    else
+        cout << "ERREUR: Impossible d'ouvrir le fichier." << endl;
+
+    return frequencies;
+}
+
+
+/*
+* Build the files histograms.csv (containing the histograms of every sketch of the database)
+*/
+void store_hist(vector<vector<vector<double> > > test_base){
+    int n_sketches = test_base.size();
+    int fv_size = test_base[0].size();
+    int dim = test_base[0][0].size();
+    int m, view;
+    vector<vector<double> > centers = load_centroids("storage/centroids.csv");
+    vector<double> frequencies = load_frequencies("storage/frequencies.csv");
+    vector<double> hist;
+    ofstream streamHist("storage/histograms.csv");
     if(streamHist)
     {
         for(int i = 0;i<n_sketches;i++){
@@ -317,6 +380,7 @@ void build_hist_freq(vector<vector<vector<double> > > test_base){
             }
             for(int r=0; r<temp.size(); r++)
             {
+                temp[r] = temp[r] / (float) nb_features * log((float) N / frequencies[i]);
                 streamHist << temp[r] << ";";
             }
             m = i / nb_views_per_model; // quotient of the euclidean division
@@ -329,22 +393,6 @@ void build_hist_freq(vector<vector<vector<double> > > test_base){
     else {
         cout<<"Écriture dans le fichier histograms.csv impossible";
     }
-
-    double sum = 0.;
-    for(int i = 0;i<hist.size();i++){
-        sum+=hist[i];
-    }
-
-    ofstream myStream("frequencies.csv");
-    if(myStream){
-        for (int r = 0;r<hist.size();r++){
-
-            myStream<<hist[r]/sum << ';';
-        }
-    } else {
-    cout<<"Écriture dans le fichier frequencies.csv impossible";
-    }
-
 }
 
 
@@ -403,19 +451,21 @@ int main()
     {
         for(int i=0; i<nb_views_per_model; i++)
         {
-            views[m*nb_views_per_model+i] = imread("m"+SSTR(m)+"-"+SSTR(i)+".png");
+            views[m*nb_views_per_model+i] = imread("train_data/m"+SSTR(m)+"-"+SSTR(i)+".png");
         }
     }
+    cout << "Data loaded." << endl;
 
     // Build an array of Mat, each containing a Gabor filter
-    Mat* g = build_gabor(); // array of size k
+    vector<Mat> g = build_gabor(); // array of size k
 
-    Mat* R[N];
+    vector<vector<Mat> > R;
     for(int i=0; i<N; i++)
     {
         // Apply the Gabor filter to the image views[i] and return the k response images
-        R[i] = apply_gabor(views[i], g); // array of size k
+        R.push_back(apply_gabor(views[i], g));
     }
+    cout << "Filtered images computed." << endl;
 
     // Build the Gabor features for each sketch
     vector<vector<vector<double> > > all_features;
@@ -431,9 +481,11 @@ int main()
 
     cout << "Centroids computed." << endl;
 
-    // Compute the histograms of each image in the training database and write them in histograms.csv and compute the frequencies
-    // of each centroids among all features (and write them in frequencies.csv)
-    build_hist_freq(all_features);
+    // Compute the frequencies of each centroids among all features (and write them in frequencies.csv)
+    build_freq(all_features);
+
+    // Compute and store the histograms of all training sketches in the file histograms.csv
+    store_hist(all_features);
 
     cout << "Histograms and frequencies computed." << endl;
     cout << "Training step done." << endl;
