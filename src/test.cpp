@@ -29,6 +29,8 @@ const int nb_views_per_model = 12; //100
 const int nb_models = 2; //1815
 const int N = nb_views_per_model * nb_models;
 
+const int vocabulary_size = 100; // number of centroids: 2500
+
 typedef Eigen::Triplet<double> T;
 
 Mat float2byte(const Mat& If)
@@ -210,7 +212,6 @@ vector<vector<double> > load_centroids(string filename)
 vector<Eigen::SparseMatrix<double> > load_histograms(string filename, vector<string> &objects)
 {
     vector<Eigen::SparseMatrix<double> > histograms; // contains all the histograms of the training sketches
-    int nb_centroids = 2500;
     string line;
     ifstream file(filename.c_str());
     if(file)
@@ -224,7 +225,7 @@ vector<Eigen::SparseMatrix<double> > load_histograms(string filename, vector<str
             objects.push_back(s.back());
             s.pop_back();
 
-            Eigen::SparseMatrix<double> h(nb_centroids, 1);
+            Eigen::SparseMatrix<double> h(vocabulary_size, 1);
             vector<T> tripletList;
             for(int i=0; i<s.size(); i++)
                 tripletList.push_back(T(i,0,atof(s[i].c_str())));
