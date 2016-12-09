@@ -334,28 +334,28 @@ Eigen::SparseMatrix<double> buil_hist(const vector<vector<double> > &centroids, 
 
 
 /*
-* Gives the indices of the k smallest elements of tab. Complexity: k*tab.size()
+* Gives the indices of the k greatest elements of tab. Complexity: k*tab.size()
 */
-vector<int> min_indices(vector<double> &tab, int k)
+vector<int> max_indices(vector<double> tab, int k)
 {
     vector<int> indices;
     int current;
-    double min_dist;
+    double max_dist;
     int n = tab.size();
     for(int i=0; i<k; i++)
     {
         current = 0;
-        min_dist = tab[0];
+        max_dist = tab[0];
         for(int j=1; j<n; j++)
         {
-            if(tab[j] < min_dist)
+            if(tab[j] > max_dist)
             {
                 current = j;
-                min_dist = tab[j];
+                max_dist = tab[j];
             }
         }
         indices.push_back(current);
-        tab[current] = DBL_MAX;
+        tab[current] = DBL_MIN;
     }
     return indices;
 }
@@ -375,7 +375,7 @@ void compare_hist(const vector<Eigen::SparseMatrix<double> > &histograms, const 
         cout << product << endl;
         dist.push_back(product.coeffRef(0,0) / (hist.norm() * histograms[i].norm()));
     }
-    vector<int> sorted_idx = min_indices(dist, 5);
+    vector<int> sorted_idx = max_indices(dist, 5);
 
     cout << "Best matches : ";
     for(int i=0; i<5; i++)
