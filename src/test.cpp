@@ -369,11 +369,9 @@ void compare_hist(const vector<Eigen::SparseMatrix<double> > &histograms, const 
 {
     vector<double> dist; // distances between hist and the histograms of the database
     Eigen::SparseMatrix<double> product;
-    //cout << hist << endl;
     for(int i=0; i<histograms.size(); i++)
     {
-        product = hist * histograms[i].transpose();
-        cout << product << endl;
+        product = hist.transpose() * histograms[i];
         dist.push_back(product.coeffRef(0,0) / (hist.norm() * histograms[i].norm()));
     }
     vector<int> sorted_idx = max_indices(dist, 5);
@@ -382,11 +380,6 @@ void compare_hist(const vector<Eigen::SparseMatrix<double> > &histograms, const 
     for(int i=0; i<5; i++)
         cout << objects[sorted_idx[i]]<< " ; ";
     cout << endl;
-
-    /*for(int i=0; i<objects.size(); i++)
-    {
-        cout << dist[i] << endl;
-    }*/
 }
 
 
