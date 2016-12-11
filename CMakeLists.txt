@@ -9,10 +9,6 @@ SET(EIGEN3_INCLUDE_DIR "~/Documents/cours/lib")
 SET(BOOST_INCLUDE_DIR "~/Documents/cours/lib/boost_1_62_0")
 
 INCLUDE_DIRECTORIES(${OpenCV_INCLUDE_DIRS} ${EIGEN3_INCLUDE_DIR} ${BOOST_INCLUDE_DIR})
-ADD_EXECUTABLE(train train.cpp)
-ADD_EXECUTABLE(test test.cpp)
-TARGET_LINK_LIBRARIES(train ${OpenCV_LIBS})
-TARGET_LINK_LIBRARIES(test ${OpenCV_LIBS})
 
 ADD_EXECUTABLE(main main.cpp util.cpp util.h)
 TARGET_LINK_LIBRARIES(main ${OpenCV_LIBS})
